@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LinkIt - Shorten Your Links</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Poppins', sans-serif;
+            background: linear-gradient(135deg, #6B7280, #1F2937);
+        }
+        .fade-in {
+            animation: fadeIn 0.5s ease-in;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .scale-hover:hover {
+            transform: scale(1.05);
+            transition: transform 0.3s ease;
+        }
+        .ripple {
+            position: relative;
+            overflow: hidden;
+        }
+        .ripple::after {
+            content: '';
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            background: rgba(255, 255, 255, 0.2);
+            top: 0;
+            left: 0;
+            pointer-events: none;
+            transform: scale(0);
+            border-radius: 50%;
+            animation: ripple-effect 0.6s ease-out;
+        }
+        @keyframes ripple-effect {
+            to {
+                transform: scale(4);
+                opacity: 0;
+            }
+        }
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.5);
+            align-items: center;
+            justify-content: center;
+            z-index: 50;
+        }
+        .modal-content {
+            background: white;
+            padding: 24px;
+            border-radius: 12px;
+            max-width: 400px;
+            width: 100%;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+        .copy-anim {
+            animation: copyEffect 0.5s ease;
+        }
+        @keyframes copyEffect {
+            0% { background-color: #4f46e5; }
+            50% { background-color: #10b981; }
+            100% { background-color: #4f46e5; }
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col p-4">
+    {% include 'header.html' %}
+    <main class="flex-grow flex items-center justify-center">
+        <div class="bg-white p-8 rounded-2xl shadow-xl w-full max-w-md mx-auto transition-all duration-300 hover:shadow-2xl fade-in">
+            <h1 class="text-3xl font-bold text-center text-gray-800 mb-6">Pendekkan Konten Kamu</h1>
+            {% if error %}
+            <div class="mb-6 p-4 bg-red-100 rounded-lg fade-in">
+                <p class="text-red-800 font-semibold">{{ error }}</p>
+            </div>
+            {% endif %}
+            {% if success %}
+            <div class="mb-6 p-4 bg-green-100 rounded-lg fade-in">
+                <p class="text-green-800 font-semibold mb-2">Berhasil memendekkan!</p>
+                <div class="mb-4">
+                    <label for="short_url" class="block text-sm font-medium text-gray-700">Link Pendek Anda:</label>
+                    <input type="text" id="short_url" value="{{ short_url }}" readonly
+                           class="mt-1 block w-full p-3 border border-gray-300 rounded-lg bg-gray-50 text-gray-800 cursor-text focus:outline-none">
+                </div>
+                <div class="flex justify-center space-x-4">
+                    <button data-url="{{ short_url | replace('\'', '\\\'') }}" class="copy-button bg-indigo-600 text-white p-3 rounded-md hover:bg-indigo-700 transition ripple flex items-center scale-hover">
+                        <svg class="copy-icon w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"></path>
+                        </svg>
+                        <svg class="check-icon w-5 h-5 mr-2 hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                        </svg>
+                        Salin Link
+                    </button>
+                    <a href="{{ short_url }}" target="_blank" class="bg-indigo-600 text-white p-3 rounded-md hover:bg-indigo-700 transition ripple flex items-center scale-hover">
+                        <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"></path>
+                        </svg>
+                        Buka Link
+                    </a>
+                </div>
+            </div>
+            {% endif %}
+            {% if user %}
+            {% endif %}
+            <form method="post" action="/shorten" enctype="multipart/form-data">
+                <div class="mb-4">
+                    <label for="content_type" class="block text-sm font-medium text-gray-700">Tipe Konten</label>
+                    <select name="content_type" id="content_type" onchange="toggleInput(this.value)"
+                            class="mt-1 block w-full p-3 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500 transition duration-200">
+                        <option value="url">URL</option>
+                        <option value="text">Teks</option>
+                        <option value="image">Gambar</option>
+                        <option value="document">Dokumen</option>
+                    </select>
+                </div>
+                <div id="url_input" class="mb-4">
+                    <label for="url" class="block text-sm font-medium text-gray-700">URL</label>
+                    <input type="text" name="url" id="url"
+                           class="mt-1 block w-full p-3 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500 transition duration-200">
+                </div>
+                <div id="text_input" class="mb-4 hidden">
+                    <label for="text" class="block text-sm font-medium text-gray-700">Teks</label>
+                    <textarea name="text" id="text" rows="4"
+                              class="mt-1 block w-full p-3 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500 transition duration-200"></textarea>
+                </div>
+                <div id="file_input" class="mb-4 hidden">
+                    <label for="file" class="block text-sm font-medium text-gray-700">File (Gambar/Dokumen)</label>
+                    <input type="file" name="file" id="file"
+                           class="mt-1 block w-full p-3 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500 transition duration-200">
+                </div>
+                <div class="mb-4">
+                    <label for="custom_code" class="block text-sm font-medium text-gray-700">Kode Kustom (opsional, 3-10 karakter)</label>
+                    <input type="text" name="custom_code" id="custom_code"
+                           class="mt-1 block w-full p-3 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500 transition duration-200">
+                </div>
+                <div class="mb-4">
+  <label for="folder_id" class="block text-sm font-medium text-gray-700">Simpan ke Folder (Opsional)</label>
+  <select name="folder_id" id="folder_id"
+          class="mt-1 block w-full p-3 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500 transition duration-200">
+      <option value="">-- Tidak Masukkan ke Folder --</option>
+      {% for folder in folders %}
+          <option value="{{ folder.id }}">{{ folder.name }}</option>
+      {% endfor %}
+  </select>
+</div>
+
+                <button type="submit" class="w-full bg-indigo-600 text-white p-3 rounded-md hover:bg-indigo-700 transition ripple scale-hover">
+                    Pendekkan
+                </button>
+            </form>
+        </div>
+    </main>
+    {% include 'footer.html' %}
+    <!-- Modal untuk konfirmasi logout -->
+    {% if user %}
+    <div id="logout-modal" class="modal">
+        <div class="modal-content fade-in">
+            <h2 class="text-xl font-bold text-gray-800 mb-4">Konfirmasi Logout</h2>
+            <p class="text-gray-600 mb-4">Yakin ingin logout?</p>
+            <div class="flex space-x-2">
+                <a href="/logout" class="bg-blue-500 text-white p-2 rounded-lg hover:bg-blue-600 transition ripple">Ya, Logout</a>
+                <button type="button" onclick="closeLogoutModal()" class="bg-gray-300 text-gray-800 p-2 rounded-lg hover:bg-gray-400 transition">Batal</button>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+    <script src="/static/js/scripts.js"></script>
+    <script>
+        function toggleInput(contentType) {
+            document.getElementById('url_input').classList.add('hidden');
+            document.getElementById('text_input').classList.add('hidden');
+            document.getElementById('file_input').classList.add('hidden');
+            if (contentType === 'url') {
+                document.getElementById('url_input').classList.remove('hidden');
+            } else if (contentType === 'text') {
+                document.getElementById('text_input').classList.remove('hidden');
+            } else if (contentType === 'image' || contentType === 'document') {
+                document.getElementById('file_input').classList.remove('hidden');
+            }
+        }
+    </script>
+</body>
+<script>
+    document.getElementById('year').textContent = new Date().getFullYear();
+</script>
+
+</html>
