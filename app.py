@@ -19,6 +19,8 @@ load_dotenv()
 
 SUPABASE_URL = os.getenv('SUPABASE_URL')
 SUPABASE_KEY = os.getenv('SUPABASE_KEY')
+# Guest mode: optional fixed user id for unauthenticated usage
+PUBLIC_USER_ID = os.getenv('PUBLIC_USER_ID')
 
 if not SUPABASE_URL or not SUPABASE_KEY:
     raise ValueError("SUPABASE_URL dan SUPABASE_KEY harus diatur di file .env.")
@@ -175,7 +177,7 @@ def dashboard():
 
     return render_template(
         'dashboard.html',
-        user=session['user'],
+        user=session.get('user'),
         links=links,
         page=page,
         total_pages=total_pages,
@@ -270,7 +272,7 @@ def profile():
         try:
             supabase.table('users').update(updates).eq('id', user['id']).execute()
             session['user']['email'] = new_email if new_email else user['email']
-            return render_template('profile.html', user=session['user'], success='Profil berhasil diperbarui!')
+            return render_template('profile.html', user=session.get('user'), success='Profil berhasil diperbarui!')
         except Exception as e:
             logging.error(f"Error saat update profil: {str(e)}")
             return render_template('profile.html', user=user, error=f'Gagal memperbarui profil: {str(e)}')
@@ -278,8 +280,18 @@ def profile():
 
 @app.route('/shorten', methods=['POST'])
 def shorten():
-    if 'user' not in session:
-        return redirect(url_for('login'))
+    # Guest mode support: allow using the app without login
+    # If not logged in, we will use PUBLIC_USER_ID (ENV) as owner of the link.
+    # This avoids schema changes and keeps storage paths consistent.
+    user_obj = session.get('user')
+    if user_obj:
+        user_id = user_obj['id']
+    else:
+        if not PUBLIC_USER_ID:
+            # If not configured, tell user to set it
+            return render_template('index.html', user=session.get('user'), error='Guest mode belum dikonfigurasi. Set ENV PUBLIC_USER_ID di Vercel.')
+        user_id = PUBLIC_USER_ID
+
 
     content_type = request.form['content_type']
     custom_code = request.form.get('custom_code', '').strip()
@@ -289,9 +301,9 @@ def shorten():
     
     if custom_code:
         if not is_valid_custom_code(custom_code):
-            return render_template('index.html', user=session['user'], error='Kode kustom tidak valid! Gunakan 3-10 karakter (huruf, angka, _, -).')
+            return render_template('index.html', user=session.get('user'), error='Kode kustom tidak valid! Gunakan 3-10 karakter (huruf, angka, _, -).')
         if code_exists(custom_code):
-            return render_template('index.html', user=session['user'], error='Kode kustom sudah digunakan! Coba kode lain.')
+            return render_template('index.html', user=session.get('user'), error='Kode kustom sudah digunakan! Coba kode lain.')
         short_code = custom_code
     else:
         while True:
@@ -315,15 +327,15 @@ def shorten():
             }
             file_ext = file.filename.rsplit('.', 1)[1].lower() if '.' in file.filename else ''
             if content_type == 'image' and file_ext not in allowed_extensions['image']:
-                return render_template('index.html', user=session['user'], error=f'File tidak valid! Gunakan {", ".join(allowed_extensions["image"])} untuk gambar.')
+                return render_template('index.html', user=session.get('user'), error=f'File tidak valid! Gunakan {", ".join(allowed_extensions["image"])} untuk gambar.')
             if content_type == 'document' and file_ext not in allowed_extensions['document']:
-                return render_template('index.html', user=session['user'], error=f'File tidak valid! Gunakan {", ".join(allowed_extensions["document"])} untuk dokumen.')
+                return render_template('index.html', user=session.get('user'), error=f'File tidak valid! Gunakan {", ".join(allowed_extensions["document"])} untuk dokumen.')
             
             file.seek(0, os.SEEK_END)
             file_size = file.tell()
             file.seek(0)
             if file_size > 10 * 1024 * 1024:
-                return render_template('index.html', user=session['user'], error='File terlalu besar! Maksimum 10MB.')
+                return render_template('index.html', user=session.get('user'), error='File terlalu besar! Maksimum 10MB.')
             
             file_name = f"{user_id}/{short_code}_{file.filename.replace(' ', '_')}"
             content_type_map = {
@@ -343,21 +355,21 @@ def shorten():
                 content = supabase.storage.from_('content').get_public_url(file_name)
             except Exception as e:
                 logging.error(f"Error saat upload file: {str(e)}")
-                return render_template('index.html', user=session['user'], error=f'Gagal mengunggah file: {str(e)}')
+                return render_template('index.html', user=session.get('user'), error=f'Gagal mengunggah file: {str(e)}')
         else:
-            return render_template('index.html', user=session['user'], error='Harap unggah file!')
+            return render_template('index.html', user=session.get('user'), error='Harap unggah file!')
 
     if not content:
-        return render_template('index.html', user=session['user'], error='Konten tidak valid! Pastikan URL, teks, atau file diisi.')
+        return render_template('index.html', user=session.get('user'), error='Konten tidak valid! Pastikan URL, teks, atau file diisi.')
 
     try:
         store_link(short_code, content_type, content, user_id, folder_id)
     except Exception as e:
-        return render_template('index.html', user=session['user'], error=f'Gagal menyimpan link: {str(e)}')
+        return render_template('index.html', user=session.get('user'), error=f'Gagal menyimpan link: {str(e)}')
 
     domain = urlparse(request.base_url).netloc
     short_url = f"http://{domain}/{short_code}"
-    return render_template('index.html', user=session['user'], short_url=short_url, success=f'Berhasil memendekkan! Link Anda: {short_url}')
+    return render_template('index.html', user=session.get('user'), short_url=short_url, success=f'Berhasil memendekkan! Link Anda: {short_url}')
 
 @app.route('/<short_code>')
 def redirect_url(short_code):
